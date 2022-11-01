@@ -1,0 +1,3 @@
+[submodule "FS-Mol"]
+	path = FS-Mol
+	url = https://github.com/artsousa/FS-Mol
