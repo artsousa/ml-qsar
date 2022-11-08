@@ -20,6 +20,7 @@ class GGNeuralNet(torch.nn.Module):
         num_layers,
         aggr = 'add',
         bias = True,
+        num_edge_types=1,
     ) -> None:
         super(GGNeuralNet, self).__init__()
         
@@ -27,7 +28,8 @@ class GGNeuralNet(torch.nn.Module):
                                 num_features, 
                                 num_layers, 
                                 aggr=aggr, 
-                                bias=bias,)
+                                bias=bias,
+                                num_edge_types=num_edge_types,)
 
     def get_layers_dim(self) -> None:
         return self.graph_conv
