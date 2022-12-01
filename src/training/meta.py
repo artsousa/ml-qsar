@@ -22,7 +22,12 @@ from fs_mol.data import (
     FSMolTaskSample,
     StratifiedTaskSampler,
 )
+from fs_mol.data.maml import (
+    FSMolStubGraphDataset, 
+    TFGraphBatchIterable
+)
 from fs_mol.data.fsmol_task_sampler import SamplingException
+
 
 
 logger = logging.getLogger()
@@ -35,6 +40,44 @@ def save_checkpoint(model: nn.Module, save_path: str, step: Union[str, int]):
         model.state_dict(),
         os.path.join(save_path, f"{ckpt_name}_state_dict.pth"),
     )
+
+def get_task_sampler(train_size, 
+                        min_test_size,
+                        test_size) -> nn.Module:
+
+    return StratifiedTaskSampler(
+                train_size_or_ratio=train_size,
+                valid_size_or_ratio=0,
+                test_size_or_ratio=(min_test_size, test_size),
+            )
+
+def run_iteration(
+        adaptation_data: Tuple[torch.Tensor],
+        evaluation_data: Tuple[torch.Tensor],
+        learner,
+        criterion: nn.Module,
+        inner_steps: int,
+        device: torch.device,
+        metrics: List[str],
+        no_grad: bool = False,
+    ) -> Tuple:
+
+    pass
+
+
+def get_batched_samples(task: FSMolTask) -> Tuple:
+    support_data = TFGraphBatchIterable(
+                        samples=task.train_samples,
+                        shuffle=True,              
+                        max_num_nodes=10000,
+                    )
+    evaluation_data = TFGraphBatchIterable(
+                        samples=task.test_samples,
+                        shuffle=True,              
+                        max_num_nodes=10000,
+                    )
+
+    return support_data, evaluation_data
 
 def meta_training(
     meta_learner,
@@ -60,11 +103,7 @@ def meta_training(
             f"meta_batch_size ({meta_batch_size}) must <= number of tasks ({total_train_tasks})"
         )
 
-    task_sampler = StratifiedTaskSampler(
-        train_size_or_ratio=train_size,
-        valid_size_or_ratio=0,
-        test_size_or_ratio=(min_test_size, test_size),
-    )
+    task_sampler = get_task_sampler(train_size, min_test_size, test_size)
 
     def read_and_sample_from_task(paths: List[RichPath], 
                                     id: int) -> Iterable[FSMolTaskSample]:
@@ -85,6 +124,9 @@ def meta_training(
     epoch_count = 0
     steps_epoch = dataset.get_num_fold_tasks(DataFold.TRAIN) // task_batch_size
     logger.info(f"Total of {steps_epoch} steps per epoch\n")
+
+    stub_graph_dataset = FSMolStubGraphDataset()
+    description = stub_graph_dataset.get_batch_tf_data_description()
 
     ########## Meta training ##########
     for step in range(meta_steps):
@@ -107,15 +149,31 @@ def meta_training(
             if step > 0:
                 epoch_count += 1
         
-        ### sample K tasks ###
-        task_batch = next(batches_iterator)
+        ### sample task_batch_size tasks ###
+        task_batch = next(batches_iterator) 
 
         for task in task_batch:
-            
-                
-        # for task_batch in :
-        #     logging.info(f"task batch size: {len(task_batch)}, {type(task_batch)}")    
-        #     print(task_batch)
+            logging.info(f'{task.name} {len(task.train_samples)}')
+
+            learner = meta_learner.clone()
+            inner_data, outer_data = get_batched_samples(task)
+
+            for train_samples in inner_data:
+                logging.info(f'train_samples {train_samples}')
+
+            break
+            # outer_loss, outer_metrics = run_iteration(
+            #                                 adaptation_data=inner_data,
+            #                                 evaluation_data=outer_data,
+            #                                 learner=learner,
+            #                                 criterion=criterion,
+            #                                 inner_steps=inner_steps,
+            #                                 device=device,
+            #                                 metrics=metrics,                         
+            #                             )
+
+
+        break
 
         
         logging.info(f" ==> Meta_training_loss: {meta_train_loss} \n")
