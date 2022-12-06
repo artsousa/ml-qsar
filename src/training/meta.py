@@ -175,17 +175,11 @@ def meta_training(
                                             dtype=torch.int32)
                 node2graphmap = torch.tensor(inner_features['node_to_graph_map'],
                                             dtype=torch.int32)
-
-                # adjacency_list_0 = inner_features['adjacency_list_0'] 
-                # adjacency_list_1 = inner_features['adjacency_list_1'] 
-                # adjacency_list_2 = inner_features['adjacency_list_2'] 
                 
-                logger.info(f"num_graphs_in_batch: {inner_features['num_graphs_in_batch']}")
                 batch_index, adj_lists = aux.map_batch(inner_features,
                                                         stub_graph_dataset.num_edge_types)
 
-                logger.info(f"batch index: {batch_index[0]}")
-                logger.info(f"adj_lists: {adj_lists[0]}")
+                logger.info(f"match: {len(adj_lists)}, {len(batch_index)}")
                 # logging.info(f"node_features: {node_features.shape}")
                 # logging.info(f"node to graph: {node_to_graph_map.shape}")
                 # logging.info(f"adjacency_list_ 0: {adjacency_list_0.shape}")

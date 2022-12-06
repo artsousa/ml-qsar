@@ -17,24 +17,16 @@ def get_batch_index(adj_matrix: Tensor,
     for j in range(num_graphs):
         ind = set(np.where(graph_map == j)[0])
 
-        # for i, edge in enumerate(adj_matrix):
-        #     edge = np.array(edge)
-        #     logger.info(f"edge set: {edge}")
-        #     logger.info(f"inters: {ind.intersection(edge)}")
-        #     logger.info(f"edge set: {ind.intersection(edge) == set(edge)}")
-        #     break
-
         ind_adj = [i for i, edge in enumerate(adj_matrix) 
                        if ind.intersection(np.array(edge)) == set(np.array(edge))]
 
         batch_index[ind_adj] = j
-        
 
     return batch_index
 
 def map_batch(features: Dict, num_edge: int) -> Tuple:
 
-    adjacency_lists = tuple(torch.tensor(features[f"adjacency_list_{edge_type_idx}"], dtype=torch.long)
+    adjacency_lists = tuple(torch.tensor(features[f"adjacency_list_{edge_type_idx}"], dtype=torch.int32)
                                 for edge_type_idx in range(num_edge)),
 
     batch_indexes = tuple()
