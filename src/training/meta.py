@@ -2,13 +2,14 @@ import json
 import logging
 import os
 import sys
+import importlib
 from typing import Dict, List, Tuple, Union, Iterable
 
 import numpy as np
 import torch
 import torch.nn as nn
 
-from src import utils
+from src.utils import aux
 from dpu_utils.utils import RichPath
 from more_itertools import (
     chunked, 
@@ -28,8 +29,7 @@ from fs_mol.data.maml import (
 )
 from fs_mol.data.fsmol_task_sampler import SamplingException
 
-
-
+importlib.reload(aux)
 logger = logging.getLogger()
 
 
@@ -70,11 +70,13 @@ def get_batched_samples(task: FSMolTask) -> Tuple:
                         samples=task.train_samples,
                         shuffle=True,              
                         max_num_nodes=10000,
+                        max_num_graphs=4,
                     )
     evaluation_data = TFGraphBatchIterable(
                         samples=task.test_samples,
                         shuffle=True,              
                         max_num_nodes=10000,
+                        max_num_graphs=4,
                     )
 
     return support_data, evaluation_data
@@ -158,8 +160,39 @@ def meta_training(
             learner = meta_learner.clone()
             inner_data, outer_data = get_batched_samples(task)
 
-            for train_samples in inner_data:
-                logging.info(f'train_samples {train_samples}')
+            # inner_data -> is the batched support data iterator
+            # outer_data -> is the batched evaluation data iterator
+            # edge_features_* -> not utilized here
+            # node_features -> (N, z) N-nodes num in graphs batch, z-feature size
+            # node_to_graph_map -> (N,) indicate each node belong to each graph
+            # num_graphs_in_batch -> self explicative
+            # adjacency_list_* -> list adjacency for all graphs in batch
+
+            for inner_features, inner_labels in inner_data:
+                # logging.info(f"keys: {inner_features.keys()}")
+
+                node_features = torch.tensor(inner_features['node_features'], 
+                                            dtype=torch.int32)
+                node2graphmap = torch.tensor(inner_features['node_to_graph_map'],
+                                            dtype=torch.int32)
+
+                # adjacency_list_0 = inner_features['adjacency_list_0'] 
+                # adjacency_list_1 = inner_features['adjacency_list_1'] 
+                # adjacency_list_2 = inner_features['adjacency_list_2'] 
+                
+                logger.info(f"num_graphs_in_batch: {inner_features['num_graphs_in_batch']}")
+                batch_index, adj_lists = aux.map_batch(inner_features,
+                                                        stub_graph_dataset.num_edge_types)
+
+                logger.info(f"batch index: {batch_index[0]}")
+                logger.info(f"adj_lists: {adj_lists[0]}")
+                # logging.info(f"node_features: {node_features.shape}")
+                # logging.info(f"node to graph: {node_to_graph_map.shape}")
+                # logging.info(f"adjacency_list_ 0: {adjacency_list_0.shape}")
+                # logging.info(f"adjacency_list_ 1: {adjacency_list_1.shape}")
+                # logging.info(f"adjacency_list_ 2: {adjacency_list_2.shape}")
+
+                break
 
             break
             # outer_loss, outer_metrics = run_iteration(
@@ -171,7 +204,6 @@ def meta_training(
             #                                 device=device,
             #                                 metrics=metrics,                         
             #                             )
-
 
         break
 
