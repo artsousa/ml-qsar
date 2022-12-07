@@ -8,6 +8,9 @@ from torch import Tensor
 import torch.nn.functional as F
 from torch.utils.data import Dataset
 
+import logging
+logger = logging.getLogger()
+
 
 class GraphDataset(Dataset):
     def __init__(self, x: List[List[np.array]], y: Optional[np.array] = None):
@@ -63,4 +66,5 @@ class GraphDataset(Dataset):
         finally:
             if len(y.size()) < 1:
                 y = y.unsqueeze(-1)
+
         return x, y

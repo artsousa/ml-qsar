@@ -15,6 +15,7 @@ from more_itertools import (
     chunked, 
     sample
 ) 
+from src.utils import dataset
 
 from fs_mol.data import (
     DataFold,
@@ -30,6 +31,11 @@ from fs_mol.data.maml import (
 )
 
 from fs_mol.data.fsmol_task_sampler import SamplingException
+
+from torch_geometric.utils import (
+    unbatch,
+    unbatch_edge_index
+)
 
 importlib.reload(aux)
 logger = logging.getLogger()
@@ -171,15 +177,12 @@ def meta_training(
             # adjacency_list_* -> list adjacency for all graphs in batch
 
             for inner_features, inner_labels in inner_data:
-                # logging.info(f"keys: {inner_features.keys()}")
-
-                node_features = inner_features['node_features']
-                node2graphmap = inner_features['node_to_graph_map']
-
-                logger.info(f"type: {node_features.shape}, {node2graphmap.shape}")
-                batch_index, adj_lists = aux.map_batch(inner_features,
-                                                        stub_graph_dataset.num_edge_types)
+                logging.info(f"keys: {inner_features.keys()}")
+                logging.info(f"batch size: {inner_labels['target_value'].shape}")
                 
+                aux.prepare_data(inner_features, inner_labels, 
+                                    stub_graph_dataset.num_edge_types)
+
                 break
 
             break
