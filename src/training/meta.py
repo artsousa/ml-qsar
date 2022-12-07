@@ -23,10 +23,12 @@ from fs_mol.data import (
     FSMolTaskSample,
     StratifiedTaskSampler,
 )
+
 from fs_mol.data.maml import (
     FSMolStubGraphDataset, 
     TFGraphBatchIterable
 )
+
 from fs_mol.data.fsmol_task_sampler import SamplingException
 
 importlib.reload(aux)
@@ -171,21 +173,13 @@ def meta_training(
             for inner_features, inner_labels in inner_data:
                 # logging.info(f"keys: {inner_features.keys()}")
 
-                node_features = torch.tensor(inner_features['node_features'], 
-                                            dtype=torch.int32)
-                node2graphmap = torch.tensor(inner_features['node_to_graph_map'],
-                                            dtype=torch.int32)
-                
+                node_features = inner_features['node_features']
+                node2graphmap = inner_features['node_to_graph_map']
+
+                logger.info(f"type: {node_features.shape}, {node2graphmap.shape}")
                 batch_index, adj_lists = aux.map_batch(inner_features,
                                                         stub_graph_dataset.num_edge_types)
-
-                logger.info(f"match: {len(adj_lists)}, {len(batch_index)}")
-                # logging.info(f"node_features: {node_features.shape}")
-                # logging.info(f"node to graph: {node_to_graph_map.shape}")
-                # logging.info(f"adjacency_list_ 0: {adjacency_list_0.shape}")
-                # logging.info(f"adjacency_list_ 1: {adjacency_list_1.shape}")
-                # logging.info(f"adjacency_list_ 2: {adjacency_list_2.shape}")
-
+                
                 break
 
             break

@@ -4,16 +4,17 @@ from typing import Optional, Tuple, List
 
 import numpy as np
 import torch
+from torch import Tensor
 import torch.nn.functional as F
 from torch.utils.data import Dataset
 
 
 class GraphDataset(Dataset):
-    def __init__(self, x: List[List[np.ndarray]], y: Optional[np.ndarray] = None):
+    def __init__(self, x: List[List[np.array]], y: Optional[np.array] = None):
         """PyTorch Dataset for molecular graphs.
         Parameters
         ----------
-        x : List[List[np.ndarray]]
+        x : List[List[np.array]]
             List of adjacency matrices and node feature matrices.
             Must be in the following order [adj_mat, node_feat] where
             each of adj_mat and node_feat is a list of np.ndarray.
