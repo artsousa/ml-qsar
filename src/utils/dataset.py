@@ -55,7 +55,8 @@ class GraphDataset(Dataset):
             where N is number of nodes and F is number of features.
             y is the output labels. y is set to 0 if no outputs are provided.
         """
-        x = [torch.FloatTensor(self.x[0][idx]), torch.FloatTensor(self.x[1][idx])]
+
+        x = [self.x[0][idx], torch.FloatTensor(self.x[1][idx])]
         a = torch.ones(len(x[1]), 1)
         x.append(a)
 

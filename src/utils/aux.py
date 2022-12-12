@@ -3,6 +3,7 @@ import torch
 import numpy as np
 import logging
 import importlib
+import torch.nn.functional as F
 
 from src.utils import dataset
 from fs_mol.data.maml import (
@@ -11,7 +12,10 @@ from fs_mol.data.maml import (
 
 from typing import Dict, Tuple, List
 from torch import Tensor
-from torch.utils.data import Dataset
+from torch.utils.data import (
+    Dataset,
+    DataLoader
+)
 from torch_geometric.utils import (
     to_dense_adj,
     unbatch_edge_index
@@ -73,23 +77,13 @@ def prepare_data(inner_features: Dict, inner_labels: Dict, num_edges: int):
     adj_lists = map_batch(inner_features, num_edges)
     adj_lists = list(adj_lists)
 
-    counter = 0
     unbatched_lists = [unbatch_edge_index(torch.tensor(adj_list.T, dtype=torch.int64), 
                                             torch.tensor(node2graphmap, dtype=torch.int64)) 
                             for adj_list in adj_lists]
 
-    for idx, unb_list in enumerate(unbatched_lists):
-        logger.info(f"{idx} LIST, ")
-
-        for j, adj in enumerate(unb_list):
-            logger.info(f"{j} node {adj} \n")
-
-    logger.info(f"\n\n--\n\n")
     # 3 loops iteration, 1 for each adJ-list, num_graphs for each adj
-    #
     adj_per_sample = {}
     for unb_list in unbatched_lists:
-        logger.info(f'list: {len(unb_list)}')
         sample_counter = 0
 
         while sample_counter < inner_features['num_graphs_in_batch']:
@@ -98,58 +92,81 @@ def prepare_data(inner_features: Dict, inner_labels: Dict, num_edges: int):
                     adj_per_sample[sample_counter].append(unb_list[sample_counter])
             except KeyError as e:
                 adj_per_sample[sample_counter] = [unb_list[sample_counter]]
+            except IndexError as ie:
+                adj_per_sample[sample_counter].append(torch.tensor([]))
             except Exception as e:
                 logger.info(f'Exception while unbatching stuff: {e}')
             finally: 
                 sample_counter += 1
-        
-    logger.info(f"size: {len(adj_per_sample)} \n\n")
-    logger.info(f"st adj: {len(adj_per_sample[0])}")
-    logger.info(f"st adj: {adj_per_sample[0]}\n\n")
 
-    logger.info(f"nd adj: {len(adj_per_sample[1])}\n\n")
-    logger.info(f"nd adj: {adj_per_sample[1]}\n\n")
+    list_adj = []
+    for key in adj_per_sample.keys():
+        list_adj.append([np.array(to_dense_adj(adj_list)[0]) 
+                                if adj_list.shape[0] > 0 else np.array([])
+                                for adj_list in adj_per_sample[key]])
 
-    logger.info(f"th adj: {len(adj_per_sample[2])}\n\n")
-    logger.info(f"th adj: {adj_per_sample[2]}\n\n")
+    # if adj_list.shape[0] > 0 else np.array([]) 
+    # logger.info(f"samples: {len(ds[0][0][0])}") 
+    ds = dataset.GraphDataset([list_adj, nodes_unbatched], 
+                                inner_labels['target_value'])
+
+    dataloader = DataLoader(
+        dataset=ds,
+        batch_size=inner_features['num_graphs_in_batch'],
+        num_workers=0,
+        shuffle=False,
+        collate_fn=post_batch_padding_collate_fn,
+    )
+
+    for batched_data in dataloader:
+        logger.info(f"BATCHED DATA: {batched_data}")
+
+
+
+
+def post_batch_padding_collate_fn(batch_data: List[tuple]) -> Tuple[torch.Tensor]:
+    """Custom collate function for PyTorch DataLoader.
+    This function is used to zero pad inputs to the same dimentions after batching.
     
-    logger.info(f"nd adj: {len(adj_per_sample[3])}")
-    logger.info(f"nd adj: {adj_per_sample[3]}")
+    Arguments:
+        batch_data {list} -- list of tuple (x, y) from GraphDataset
+            - x: list of torch tensors [adj_mat, node_feat, atom_vec]
+            - y: torch tensor
+    Parameters
+    ----------
+    batch_data : List[tuple]
+        List of tuples (x, y) with length of batch size.
+        Each element in the list is an instance from GraphDataset.
+            - x: List[torch.Tensor]
+            - y: torch.Tensor
+    Returns
+    -------
+    Tuple[torch.Tensor]
+        Tuple (x, y) of padded and batched tensors.
+    """
+    x, y = zip(*batch_data)
 
-    # for nodes_unb, adjlist_unb in zip(nodes_unbatched, unbatched_lists):
-    #     logger.info(f"node_features: {nodes_unb.shape}, \n\n {len(adjlist_unb)}")
-    # for adj in adj_lists:
-    #     logger.info(f"adj * - {adj.shape}")
-    #     logger.info(f"labels - {labels}")
-    # logger.info(f"node features: {node_features.shape}")
-    # dense one hot format to represent the graph
-    # dense index format can be used to 
+    adj_mat, node_feat, atom_vec = zip(*x)
+    num_atoms = [len(v) for v in atom_vec]
+    padding_final = np.max(num_atoms)
+    padding_len = padding_final - num_atoms
+    
+    logger.info(f'')
 
-    # adj_matrices = []
-    # for adj in adj_lists:
-    #     if adj.shape[0] > 0:
-    #         matrix = to_dense_adj(torch.tensor(adj, dtype=torch.int64))
-    #         adj_matrices.append(matrix[0])
-    #     else: 
-    #         adj_matrices.append(torch.tensor([]))
+    adj_mat = torch.stack(
+        [F.pad(a, (0, p, 0, p), "constant", 0) for a, p in zip(adj_mat, padding_len)], 0
+    )
+    node_feat = torch.stack(
+        [F.pad(n, (0, 0, 0, p), "constant", 0) for n, p in zip(node_feat, padding_len)], 0
+    )
+    atom_vec = torch.stack(
+        [F.pad(v, (0, 0, 0, p), "constant", 0) for v, p in zip(atom_vec, padding_len)], 0
+    )
+    
+    x = [adj_mat, node_feat, atom_vec]
+    y = torch.stack(y, 0)
 
-    # for matrix in adj_matrices:
-    #     logger.info(f"matrix shape 0: {matrix.shape}")
-
-    # ds = dataset.GraphDataset([adj_matrices, node_features], labels)
-
-    # logger.info(f"inner labels: {labels}")
-    # logger.info(f"num_ tasks: {len(ds)}")
-
-    # sample = ds[1]
-
-    # logger.info(f"{len(sample)}")
-    # for graph in sample[0]:
-    #     logger.info(f"matrix shape: {graph.shape}")
-
-    # logger.info(f"{np.sum(sample[0][0] - adj_matrices[0])}")
-
-    # logger.info(f"first sample: {len(sample[0])} label: {sample[1]}")
+    return x, y
     
 
 
