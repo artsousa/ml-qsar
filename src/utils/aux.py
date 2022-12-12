@@ -1,3 +1,4 @@
+import sys
 import torch
 import numpy as np
 import logging
@@ -77,8 +78,44 @@ def prepare_data(inner_features: Dict, inner_labels: Dict, num_edges: int):
                                             torch.tensor(node2graphmap, dtype=torch.int64)) 
                             for adj_list in adj_lists]
 
+    for idx, unb_list in enumerate(unbatched_lists):
+        logger.info(f"{idx} LIST, ")
+
+        for j, adj in enumerate(unb_list):
+            logger.info(f"{j} node {adj} \n")
+
+    logger.info(f"\n\n--\n\n")
+    # 3 loops iteration, 1 for each adJ-list, num_graphs for each adj
+    #
+    adj_per_sample = {}
     for unb_list in unbatched_lists:
-        logger.info(f"size: {len(unb_list)}")
+        logger.info(f'list: {len(unb_list)}')
+        sample_counter = 0
+
+        while sample_counter < inner_features['num_graphs_in_batch']:
+            try:
+                if len(adj_per_sample[sample_counter]) > 0:
+                    adj_per_sample[sample_counter].append(unb_list[sample_counter])
+            except KeyError as e:
+                adj_per_sample[sample_counter] = [unb_list[sample_counter]]
+            except Exception as e:
+                logger.info(f'Exception while unbatching stuff: {e}')
+            finally: 
+                sample_counter += 1
+        
+    logger.info(f"size: {len(adj_per_sample)} \n\n")
+    logger.info(f"st adj: {len(adj_per_sample[0])}")
+    logger.info(f"st adj: {adj_per_sample[0]}\n\n")
+
+    logger.info(f"nd adj: {len(adj_per_sample[1])}\n\n")
+    logger.info(f"nd adj: {adj_per_sample[1]}\n\n")
+
+    logger.info(f"th adj: {len(adj_per_sample[2])}\n\n")
+    logger.info(f"th adj: {adj_per_sample[2]}\n\n")
+    
+    logger.info(f"nd adj: {len(adj_per_sample[3])}")
+    logger.info(f"nd adj: {adj_per_sample[3]}")
+
     # for nodes_unb, adjlist_unb in zip(nodes_unbatched, unbatched_lists):
     #     logger.info(f"node_features: {nodes_unb.shape}, \n\n {len(adjlist_unb)}")
     # for adj in adj_lists:
