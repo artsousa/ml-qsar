@@ -2,6 +2,7 @@
 
 from typing import Optional, Tuple, List
 
+import dgl
 import numpy as np
 import torch
 from torch import Tensor
@@ -11,6 +12,42 @@ from torch.utils.data import Dataset
 import logging
 logger = logging.getLogger()
 
+
+class MolecularGraphDataset(dgl.data.DGLDataset):
+    def __init__(self,  x: List[List[torch.tensor]], y: Optional[np.array]):
+        self.EDGE_TYPE = {0: "simple", 1: "double", 2: "triple"}
+        self.ETYPES = [('_N', val, '_N') for key, val in self.EDGE_TYPE.items()]
+        self.data = self._load_graphs(x, y)
+
+    def __getitem__(self, idx):
+        return self.data[idx]
+
+    def __len__(self):
+        return len(self.data)
+
+    def _load_graphs(self, x: List[List[np.array]], y: Optional[np.array]):
+        graphs = []
+        for adj_mats, feat_nodes in zip(x[0], x[1]):
+
+            graph = dgl.heterograph({self.ETYPES[0]: (adj_mats[0][0, :], 
+                                                adj_mats[0][1, :])}, )
+
+            for idx, adj_matrix in enumerate(adj_mats):
+                if idx == 0:
+                    continue
+
+                graph.add_edges(adj_matrix[0, :], adj_matrix[1, :], 
+                                etype=self.EDGE_TYPE[idx])
+
+            # graph.add_nodes(feat_nodes.shape[0])
+            # graph.ndata['h'] = torch.tensor(feat_nodes, dtype=torch.long)
+            
+            
+            graphs.append(graph)
+
+            logger.info(f"graph: {graph.is_valid()}")
+
+        return graphs
 
 class GraphDataset(Dataset):
     def __init__(self, x: List[List[np.array]], y: Optional[np.array] = None):

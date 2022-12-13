@@ -180,7 +180,7 @@ def meta_training(
                 logging.info(f"keys: {inner_features.keys()}")
                 logging.info(f"batch size: {inner_labels['target_value'].shape}")
                 
-                aux.prepare_data(inner_features, inner_labels, 
+                data = aux.prepare_data(inner_features, inner_labels, 
                                     stub_graph_dataset.num_edge_types)
 
                 break

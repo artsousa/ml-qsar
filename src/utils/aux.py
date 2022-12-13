@@ -74,9 +74,7 @@ def prepare_data(inner_features: Dict, inner_labels: Dict, num_edges: int):
     node2graphmap = inner_features['node_to_graph_map']
     nodes_unbatched = map_node(node_features, node2graphmap)
 
-    adj_lists = map_batch(inner_features, num_edges)
-    adj_lists = list(adj_lists)
-
+    adj_lists = list(map_batch(inner_features, num_edges)) # only converting to a list
     unbatched_lists = [unbatch_edge_index(torch.tensor(adj_list.T, dtype=torch.int64), 
                                             torch.tensor(node2graphmap, dtype=torch.int64)) 
                             for adj_list in adj_lists]
@@ -101,25 +99,33 @@ def prepare_data(inner_features: Dict, inner_labels: Dict, num_edges: int):
 
     list_adj = []
     for key in adj_per_sample.keys():
-        list_adj.append([np.array(to_dense_adj(adj_list)[0]) 
-                                if adj_list.shape[0] > 0 else np.array([])
-                                for adj_list in adj_per_sample[key]])
+        list_adj.append([adj_list for adj_list in adj_per_sample[key]
+                        if adj_list.shape[0] > 0])
+        # list_adj.append([torch.tensor(to_dense_adj(adj_list)[0]) 
+        #                         if adj_list.shape[0] > 0 else np.array([[]])
+        #                         for adj_list in adj_per_sample[key]])
+
+    logger.info(f"nodes unbatched; {len(nodes_unbatched)}")
+    logger.info(f"adj list unbatched: {len(list_adj)}")
+
+    ds = dataset.MolecularGraphDataset([list_adj, nodes_unbatched],
+                                        inner_labels['target_value'])
 
     # if adj_list.shape[0] > 0 else np.array([]) 
     # logger.info(f"samples: {len(ds[0][0][0])}") 
-    ds = dataset.GraphDataset([list_adj, nodes_unbatched], 
-                                inner_labels['target_value'])
+    # ds = dataset.GraphDataset([list_adj, nodes_unbatched], 
+    #                             inner_labels['target_value'])
 
-    dataloader = DataLoader(
-        dataset=ds,
-        batch_size=inner_features['num_graphs_in_batch'],
-        num_workers=0,
-        shuffle=False,
-        collate_fn=post_batch_padding_collate_fn,
-    )
+    # dataloader = DataLoader(
+    #     dataset=ds,
+    #     batch_size=inner_features['num_graphs_in_batch'],
+    #     num_workers=0,
+    #     shuffle=False,
+    #     collate_fn=post_batch_padding_collate_fn,
+    # )
 
-    for batched_data in dataloader:
-        logger.info(f"BATCHED DATA: {batched_data}")
+    # for batched_data in dataloader:
+    #     logger.info(f"BATCHED DATA: {batched_data}")
 
 
 
