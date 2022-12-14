@@ -59,35 +59,61 @@ def get_task_sampler(train_size,
                 test_size_or_ratio=(min_test_size, test_size),
             )
 
+def get_batched_samples(task: FSMolTask, inner_batch: int) -> Tuple:
+    support_data = TFGraphBatchIterable(
+                        samples=task.train_samples,
+                        shuffle=True,              
+                        max_num_nodes=10000,
+                        max_num_graphs=inner_batch,
+                    )
+    evaluation_data = TFGraphBatchIterable(
+                        samples=task.test_samples,
+                        shuffle=True,              
+                        max_num_nodes=10000,
+                        max_num_graphs=inner_batch,
+                    )
+
+    return support_data, evaluation_data
+
 def run_iteration(
-        adaptation_data: Tuple[torch.Tensor],
-        evaluation_data: Tuple[torch.Tensor],
+        adaptation_data: TFGraphBatchIterable,
+        evaluation_data: TFGraphBatchIterable,
         learner,
         criterion: nn.Module,
         inner_steps: int,
         device: torch.device,
         metrics: List[str],
         no_grad: bool = False,
+        n_edges: int = 3
     ) -> Tuple:
 
-    pass
+    logger.info(f'inner_steps: {inner_steps}')
+
+    step = 0
+    flag = False
+    for _ in range(inner_steps):
+        for inner_features, inner_labels in adaptation_data:
+            logger.info(f"step {step}, {inner_labels}")
+            
+            data = aux.prepare_data(inner_features, inner_labels, n_edges)
+            # x, y = adaptation_data
+            # x = utils.torch_utils.to_device(x, device)
+            # y = utils.torch_utils.to_device(y, device)
+            # y_pred = learner(x)
+            # train_loss = criterion(y_pred, y)
+            # train_loss /= len(y)
+            # learner.adapt(train_loss)
+            
+            if (step + 1) % inner_steps == 0:
+                flag = True
+                break
+            step += 1
+
+        if flag:
+            break
 
 
-def get_batched_samples(task: FSMolTask) -> Tuple:
-    support_data = TFGraphBatchIterable(
-                        samples=task.train_samples,
-                        shuffle=True,              
-                        max_num_nodes=10000,
-                        max_num_graphs=4,
-                    )
-    evaluation_data = TFGraphBatchIterable(
-                        samples=task.test_samples,
-                        shuffle=True,              
-                        max_num_nodes=10000,
-                        max_num_graphs=4,
-                    )
-
-    return support_data, evaluation_data
+    return (0, 0)
 
 def meta_training(
     meta_learner,
@@ -132,6 +158,7 @@ def meta_training(
     logger.info("Initial checkpoint saved.")
 
     epoch_count = 0
+    inner_batch_size = 4
     steps_epoch = dataset.get_num_fold_tasks(DataFold.TRAIN) // task_batch_size
     logger.info(f"Total of {steps_epoch} steps per epoch\n")
 
@@ -166,7 +193,7 @@ def meta_training(
             logging.info(f'{task.name} {len(task.train_samples)}')
 
             learner = meta_learner.clone()
-            inner_data, outer_data = get_batched_samples(task)
+            inner_data, outer_data = get_batched_samples(task, inner_batch_size)
 
             # inner_data -> is the batched support data iterator
             # outer_data -> is the batched evaluation data iterator
@@ -176,25 +203,18 @@ def meta_training(
             # num_graphs_in_batch -> self explicative
             # adjacency_list_* -> list adjacency for all graphs in batch
 
-            for inner_features, inner_labels in inner_data:
-                logging.info(f"keys: {inner_features.keys()}")
-                logging.info(f"batch size: {inner_labels['target_value'].shape}")
-                
-                data = aux.prepare_data(inner_features, inner_labels, 
-                                    stub_graph_dataset.num_edge_types)
-
-                break
+            outer_loss, outer_metrics = run_iteration(
+                                            adaptation_data=inner_data,
+                                            evaluation_data=outer_data,
+                                            learner=learner,
+                                            criterion=criterion,
+                                            inner_steps=inner_steps,
+                                            device=device,
+                                            metrics=metrics,
+                                            n_edges=stub_graph_dataset.num_edge_types                      
+                                        )
 
             break
-            # outer_loss, outer_metrics = run_iteration(
-            #                                 adaptation_data=inner_data,
-            #                                 evaluation_data=outer_data,
-            #                                 learner=learner,
-            #                                 criterion=criterion,
-            #                                 inner_steps=inner_steps,
-            #                                 device=device,
-            #                                 metrics=metrics,                         
-            #                             )
 
         break
 
