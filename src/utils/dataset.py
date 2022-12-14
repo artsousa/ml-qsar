@@ -8,6 +8,9 @@ import torch
 from torch import Tensor
 import torch.nn.functional as F
 from torch.utils.data import Dataset
+import importlib
+
+importlib.reload(dgl)
 
 import logging
 logger = logging.getLogger()
@@ -16,36 +19,34 @@ logger = logging.getLogger()
 class MolecularGraphDataset(dgl.data.DGLDataset):
     def __init__(self,  x: List[List[torch.tensor]], y: Optional[np.array]):
         self.EDGE_TYPE = {0: "simple", 1: "double", 2: "triple"}
-        self.ETYPES = [('_N', val, '_N') for key, val in self.EDGE_TYPE.items()]
-        self.data = self._load_graphs(x, y)
-
+        self.ntype = '_N'
+        self.ETYPES = [(self.ntype, val, self.ntype) 
+                        for key, val in self.EDGE_TYPE.items()]
+        
+        self.y = y
+        self.data = self._load_graphs(x)
+        
     def __getitem__(self, idx):
-        return self.data[idx]
+        return self.data[idx], self.y[idx]
 
     def __len__(self):
         return len(self.data)
 
-    def _load_graphs(self, x: List[List[np.array]], y: Optional[np.array]):
+    def _load_graphs(self, x: List[List[np.array]]):
         graphs = []
+        
         for adj_mats, feat_nodes in zip(x[0], x[1]):
-
-            graph = dgl.heterograph({self.ETYPES[0]: (adj_mats[0][0, :], 
-                                                adj_mats[0][1, :])}, )
-
+            graph_data = {}    
             for idx, adj_matrix in enumerate(adj_mats):
-                if idx == 0:
-                    continue
+                try:
+                    graph_data[self.ETYPES[idx]] = (adj_matrix[0, :], 
+                                                    adj_matrix[1, :])
+                except IndexError as ie:
+                    graph_data[self.ETYPES[idx]] = ([], [])
 
-                graph.add_edges(adj_matrix[0, :], adj_matrix[1, :], 
-                                etype=self.EDGE_TYPE[idx])
-
-            # graph.add_nodes(feat_nodes.shape[0])
-            # graph.ndata['h'] = torch.tensor(feat_nodes, dtype=torch.long)
-            
-            
+            graph = dgl.heterograph(graph_data,)
+            graph.nodes[self.ntype].data['h'] = torch.tensor(feat_nodes, dtype=torch.long)
             graphs.append(graph)
-
-            logger.info(f"graph: {graph.is_valid()}")
 
         return graphs
 

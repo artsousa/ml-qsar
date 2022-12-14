@@ -21,6 +21,8 @@ from torch_geometric.utils import (
     unbatch_edge_index
 )
 
+from dgl.dataloading import GraphDataLoader
+
 importlib.reload(dataset)
 logger = logging.getLogger()
 
@@ -99,35 +101,15 @@ def prepare_data(inner_features: Dict, inner_labels: Dict, num_edges: int):
 
     list_adj = []
     for key in adj_per_sample.keys():
-        list_adj.append([adj_list for adj_list in adj_per_sample[key]
-                        if adj_list.shape[0] > 0])
+        list_adj.append([adj_list for adj_list in adj_per_sample[key]])
         # list_adj.append([torch.tensor(to_dense_adj(adj_list)[0]) 
         #                         if adj_list.shape[0] > 0 else np.array([[]])
         #                         for adj_list in adj_per_sample[key]])
 
-    logger.info(f"nodes unbatched; {len(nodes_unbatched)}")
-    logger.info(f"adj list unbatched: {len(list_adj)}")
-
     ds = dataset.MolecularGraphDataset([list_adj, nodes_unbatched],
                                         inner_labels['target_value'])
 
-    # if adj_list.shape[0] > 0 else np.array([]) 
-    # logger.info(f"samples: {len(ds[0][0][0])}") 
-    # ds = dataset.GraphDataset([list_adj, nodes_unbatched], 
-    #                             inner_labels['target_value'])
-
-    # dataloader = DataLoader(
-    #     dataset=ds,
-    #     batch_size=inner_features['num_graphs_in_batch'],
-    #     num_workers=0,
-    #     shuffle=False,
-    #     collate_fn=post_batch_padding_collate_fn,
-    # )
-
-    # for batched_data in dataloader:
-    #     logger.info(f"BATCHED DATA: {batched_data}")
-
-
+    return GraphDataLoader(ds, batch_size=inner_features['num_graphs_in_batch'])
 
 
 def post_batch_padding_collate_fn(batch_data: List[tuple]) -> Tuple[torch.Tensor]:
