@@ -109,7 +109,8 @@ def prepare_data(inner_features: Dict, inner_labels: Dict, num_edges: int):
     ds = dataset.MolecularGraphDataset([list_adj, nodes_unbatched],
                                         inner_labels['target_value'])
 
-    return GraphDataLoader(ds, batch_size=inner_features['num_graphs_in_batch'])
+    return GraphDataLoader(ds, num_workers=2,
+                            batch_size=inner_features['num_graphs_in_batch'])
 
 
 def post_batch_padding_collate_fn(batch_data: List[tuple]) -> Tuple[torch.Tensor]:

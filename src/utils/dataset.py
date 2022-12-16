@@ -33,20 +33,31 @@ class MolecularGraphDataset(dgl.data.DGLDataset):
         return len(self.data)
 
     def _load_graphs(self, x: List[List[np.array]]):
+        c = 0
         graphs = []
-        
         for adj_mats, feat_nodes in zip(x[0], x[1]):
-            graph_data = {}    
+            num_nodes = -1
+            graph_data = {}  
+            
             for idx, adj_matrix in enumerate(adj_mats):
                 try:
                     graph_data[self.ETYPES[idx]] = (adj_matrix[0, :], 
                                                     adj_matrix[1, :])
                 except IndexError as ie:
                     graph_data[self.ETYPES[idx]] = ([], [])
+            try: 
+                graph = dgl.heterograph(graph_data,)
+                graph.nodes[self.ntype].data['h'] = torch.tensor(feat_nodes, dtype=torch.long)
+                graphs.append(graph)
+                c += 1
 
-            graph = dgl.heterograph(graph_data,)
-            graph.nodes[self.ntype].data['h'] = torch.tensor(feat_nodes, dtype=torch.long)
-            graphs.append(graph)
+            except dgl.DGLError as dglerror:
+                if self.y.shape[0] > 0:
+                    self.y = np.delete(self.y, c)
+                    c -= 1
+                else:
+                    self.y = np.array([])
+                    graphs = []
 
         return graphs
 

@@ -87,8 +87,6 @@ def run_iteration(
         n_edges: int = 3
     ) -> Tuple:
 
-    logger.info(f'inner_steps: {inner_steps}')
-
     step = 0
     flag = False
     for _ in range(inner_steps):
@@ -96,6 +94,11 @@ def run_iteration(
             logger.info(f"step {step}, {inner_labels}")
             
             data = aux.prepare_data(inner_features, inner_labels, n_edges)
+
+            # for idx, batched in enumerate(data):
+            #     logger.info(f"batched: {batched}\n\n")
+
+            # logger.info(f"\n\n")
             # x, y = adaptation_data
             # x = utils.torch_utils.to_device(x, device)
             # y = utils.torch_utils.to_device(y, device)
@@ -214,9 +217,9 @@ def meta_training(
                                             n_edges=stub_graph_dataset.num_edge_types                      
                                         )
 
-            break
+            # break
 
-        break
+        # break
 
         
         logging.info(f" ==> Meta_training_loss: {meta_train_loss} \n")
