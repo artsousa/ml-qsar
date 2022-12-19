@@ -52,9 +52,11 @@ class MolecularGraphDataset(dgl.data.DGLDataset):
                 c += 1
 
             except dgl.DGLError as dglerror:
-                if self.y.shape[0] > 0:
-                    self.y = np.delete(self.y, c)
-                    c -= 1
+                if self.y.shape[0] > 1:
+                    self.y = np.delete(self.y, abs(c))
+
+                    if c > 0:
+                        c -= 1
                 else:
                     self.y = np.array([])
                     graphs = []

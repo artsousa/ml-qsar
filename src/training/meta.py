@@ -91,12 +91,13 @@ def run_iteration(
     flag = False
     for _ in range(inner_steps):
         for inner_features, inner_labels in adaptation_data:
-            logger.info(f"step {step}, {inner_labels}")
+            logger.info(f"step {step}")
             
             data = aux.prepare_data(inner_features, inner_labels, n_edges)
 
-            # for idx, batched in enumerate(data):
-            #     logger.info(f"batched: {batched}\n\n")
+            for idx, batched in enumerate(data):
+                logger.info(f"{idx} - ideal labels: {len(inner_labels['target_value'])} " + 
+                         f"real processed: {batched[0].batch_size}")
 
             # logger.info(f"\n\n")
             # x, y = adaptation_data
@@ -188,12 +189,15 @@ def meta_training(
 
             if step > 0:
                 epoch_count += 1
+                logging.info(f" ==> Meta_training_loss: {meta_train_loss} \n")
+                break
         
         ### sample task_batch_size tasks ###
         task_batch = next(batches_iterator) 
 
         for task in task_batch:
-            logging.info(f'{task.name} {len(task.train_samples)}')
+            logger.info(f"\n")
+            logger.info(f'{task.name} {len(task.train_samples)}')
 
             learner = meta_learner.clone()
             inner_data, outer_data = get_batched_samples(task, inner_batch_size)
@@ -217,13 +221,9 @@ def meta_training(
                                             n_edges=stub_graph_dataset.num_edge_types                      
                                         )
 
-            # break
+        #     break
 
         # break
-
-        
-        logging.info(f" ==> Meta_training_loss: {meta_train_loss} \n")
-
 
 
 
