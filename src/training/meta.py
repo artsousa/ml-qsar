@@ -98,24 +98,19 @@ def run_iteration(
 
             for idx, batched in enumerate(data):
                 x, y = batched
-
-                logger.info(f"DIR {dir(x)}")
-
-                x, y = dgl.to_homogeneous(x, ndata=['h']).to(device), \
-                        y.to(device)
-
-                logger.info(f"x: {x.batch_size}")
+                x, y = x.to(device), y.to(device)
 
                 y_pred = learner(x)
 
-                # logger.info(f"node_num {x}")
-
-                # logger.info(f"y: {y}")
-                # logger.info(f"y_pred: {y_pred}, {y_pred.shape}")
+                logger.info(f"BATCH: {x.batch_size}")
+                logger.info(f"y_pred: {y_pred}")
+                logger.info(f"y_real: {y}")
                 
-                # train_loss = criterion(y_pred, y)
-                # train_loss /= len(y)
-                # learner.adapt(train_loss)
+                train_loss = criterion(y_pred, y)
+                train_loss /= len(y)
+                logger.info(f"step {step}, loss: {train_loss}")
+
+                learner.adapt(train_loss)
             
             if (step + 1) % inner_steps == 0:
                 flag = True

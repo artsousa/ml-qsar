@@ -53,20 +53,17 @@ class GraphClsGGNN(nn.Module):
         etypes = graph.edata['_TYPE']
         feats = graph.ndata["h"].float()
 
-        logger.info(f"BATCH: {graph}")
-
         for layer in self.convs:
-            out = layer(graph, feats, etypes)
+            out = layer(graph, feats, etypes=etypes)
             self.activation(out)
 
         with graph.local_scope():
             graph.ndata['h'] = out
             hg = dgl.mean_nodes(graph, 'h')
-            logger.info(f"MEAN : {hg.shape}")
             logits = self.output_layer(hg)
-            # preds = torch.argmax(logits, -1)
+            preds = torch.argmax(logits, -1)
 
-            return logits
+            return preds
 
 
 

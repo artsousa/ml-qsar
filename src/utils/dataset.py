@@ -48,7 +48,9 @@ class MolecularGraphDataset(dgl.data.DGLDataset):
             try: 
                 graph = dgl.heterograph(graph_data,)
                 graph.nodes[self.ntype].data['h'] = torch.tensor(feat_nodes, dtype=torch.long)
-                graphs.append(graph)
+
+                graphs.append(dgl.to_homogeneous(graph, ndata=['h']))
+                
                 c += 1
 
             except dgl.DGLError as dglerror:
