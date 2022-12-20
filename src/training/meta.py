@@ -5,6 +5,7 @@ import sys
 import importlib
 from typing import Dict, List, Tuple, Union, Iterable
 
+import dgl
 import numpy as np
 import torch
 import torch.nn as nn
@@ -78,7 +79,7 @@ def get_batched_samples(task: FSMolTask, inner_batch: int) -> Tuple:
 def run_iteration(
         adaptation_data: TFGraphBatchIterable,
         evaluation_data: TFGraphBatchIterable,
-        learner,
+        learner, 
         criterion: nn.Module,
         inner_steps: int,
         device: torch.device,
@@ -96,17 +97,25 @@ def run_iteration(
             data = aux.prepare_data(inner_features, inner_labels, n_edges)
 
             for idx, batched in enumerate(data):
-                logger.info(f"{idx} - ideal labels: {len(inner_labels['target_value'])} " + 
-                         f"real processed: {batched[0].batch_size}")
+                x, y = batched
 
-            # logger.info(f"\n\n")
-            # x, y = adaptation_data
-            # x = utils.torch_utils.to_device(x, device)
-            # y = utils.torch_utils.to_device(y, device)
-            # y_pred = learner(x)
-            # train_loss = criterion(y_pred, y)
-            # train_loss /= len(y)
-            # learner.adapt(train_loss)
+                logger.info(f"DIR {dir(x)}")
+
+                x, y = dgl.to_homogeneous(x, ndata=['h']).to(device), \
+                        y.to(device)
+
+                logger.info(f"x: {x.batch_size}")
+
+                y_pred = learner(x)
+
+                # logger.info(f"node_num {x}")
+
+                # logger.info(f"y: {y}")
+                # logger.info(f"y_pred: {y_pred}, {y_pred.shape}")
+                
+                # train_loss = criterion(y_pred, y)
+                # train_loss /= len(y)
+                # learner.adapt(train_loss)
             
             if (step + 1) % inner_steps == 0:
                 flag = True
@@ -215,15 +224,15 @@ def meta_training(
                                             evaluation_data=outer_data,
                                             learner=learner,
                                             criterion=criterion,
-                                            inner_steps=inner_steps,
+                                            inner_steps=1,
                                             device=device,
                                             metrics=metrics,
                                             n_edges=stub_graph_dataset.num_edge_types                      
                                         )
 
-        #     break
+            break
 
-        # break
+        break
 
 
 
