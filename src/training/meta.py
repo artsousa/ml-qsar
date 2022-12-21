@@ -10,13 +10,17 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from src.utils import aux
+from src.utils import (
+    aux, 
+    dataset,
+    metrics as mt, 
+)
+
 from dpu_utils.utils import RichPath
 from more_itertools import (
     chunked, 
     sample
 ) 
-from src.utils import dataset
 
 from fs_mol.data import (
     DataFold,
@@ -38,6 +42,7 @@ from torch_geometric.utils import (
     unbatch_edge_index
 )
 
+importlib.reload(mt)
 importlib.reload(aux)
 logger = logging.getLogger()
 
@@ -90,27 +95,21 @@ def run_iteration(
 
     step = 0
     flag = False
+    train_loss = 0
     for _ in range(inner_steps):
-        for inner_features, inner_labels in adaptation_data:
-            logger.info(f"step {step}")
-            
+        for inner_features, inner_labels in adaptation_data:            
             data = aux.prepare_data(inner_features, inner_labels, n_edges)
 
-            for idx, batched in enumerate(data):
+            for idx, batched in enumerate(data): # will run only once
                 x, y = batched
                 x, y = x.to(device), y.to(device)
 
-                y_pred = learner(x)
+                out = learner(x)
+                loss = criterion(out, y.unsqueeze(1))
+                loss /= y.shape[0]
+                learner.adapt(loss, allow_unused=True)
 
-                logger.info(f"BATCH: {x.batch_size}")
-                logger.info(f"y_pred: {y_pred}")
-                logger.info(f"y_real: {y}")
-                
-                train_loss = criterion(y_pred, y)
-                train_loss /= len(y)
-                logger.info(f"step {step}, loss: {train_loss}")
-
-                learner.adapt(train_loss)
+                train_loss += loss
             
             if (step + 1) % inner_steps == 0:
                 flag = True
@@ -120,8 +119,39 @@ def run_iteration(
         if flag:
             break
 
+    valid_loss = 0
+    output = np.array([]).reshape(0, 1)
+    real_out = np.array([]).reshape(0, 1)
+    for outer_features, outer_labels in evaluation_data:
+        data = aux.prepare_data(outer_features, outer_labels, n_edges)
 
-    return (0, 0)
+        for idx, batched in enumerate(data): # only once always
+            x, y = batched
+            x, y = x.to(device), y.to(device).unsqueeze(1)
+
+            if no_grad:
+                with torch.no_grad():
+                    out = learner(x)
+                    loss = criterion(out, y)
+            else:
+                out = learner(x)
+                loss = criterion(out, y)
+            
+            valid_loss += loss / y.shape[0]
+            out = out.detach().numpy()
+            output = np.concatenate((output, out), axis=0)
+            real_out = np.concatenate((real_out, y), axis=0)
+
+    valid_metrics = mt.calculate_metrics(
+        metrics=metrics,
+        y_true=real_out,
+        y_pred=output,
+        threshold=0,
+    )
+
+    torch.cuda.empty_cache()
+
+    return valid_loss, valid_metrics, train_loss
 
 def meta_training(
     meta_learner,
@@ -166,7 +196,7 @@ def meta_training(
     logger.info("Initial checkpoint saved.")
 
     epoch_count = 0
-    inner_batch_size = 4
+    inner_batch_size = 8
     steps_epoch = dataset.get_num_fold_tasks(DataFold.TRAIN) // task_batch_size
     logger.info(f"Total of {steps_epoch} steps per epoch\n")
 
@@ -200,9 +230,6 @@ def meta_training(
         task_batch = next(batches_iterator) 
 
         for task in task_batch:
-            logger.info(f"\n")
-            logger.info(f'{task.name} {len(task.train_samples)}')
-
             learner = meta_learner.clone()
             inner_data, outer_data = get_batched_samples(task, inner_batch_size)
 
@@ -214,21 +241,49 @@ def meta_training(
             # num_graphs_in_batch -> self explicative
             # adjacency_list_* -> list adjacency for all graphs in batch
 
-            outer_loss, outer_metrics = run_iteration(
-                                            adaptation_data=inner_data,
-                                            evaluation_data=outer_data,
-                                            learner=learner,
-                                            criterion=criterion,
-                                            inner_steps=1,
-                                            device=device,
-                                            metrics=metrics,
-                                            n_edges=stub_graph_dataset.num_edge_types                      
-                                        )
+            outer_loss, outer_metrics, inner_loss = run_iteration(
+                                                        adaptation_data=inner_data,
+                                                        evaluation_data=outer_data,
+                                                        learner=learner,
+                                                        criterion=criterion,
+                                                        inner_steps=inner_steps,
+                                                        device=device,
+                                                        metrics=metrics,
+                                                        n_edges=stub_graph_dataset.num_edge_types                      
+                                                    )
 
-            break
+            iteration_loss += outer_loss
+            meta_train_loss += outer_loss.item()
+            meta_training_metrics = {
+                k: v + outer_metrics[k]
+                for k, v in meta_training_metrics.items()
+            }
+            
+        optimizer.zero_grad()
+        iteration_loss.backward()
+        optimizer.step()
 
-        break
+        meta_train_loss /= meta_batch_size
+        summary_dict["meta_training_loss"].append(meta_train_loss)
+        logger.info(f"meta_training_loss: {meta_train_loss}")
 
+        # Print some metrics
+        for k, v in meta_training_metrics.items():
+            v /= meta_batch_size
+            summary_dict["meta_training_metrics"][k].append(v)
+            logger.info(f"{k}: {v}")
+
+        with open(os.path.join(save_path, "summary.json"), "w") as f:
+            json.dump(summary_dict, f)
+
+        if (step + 1) % ckpt_steps == 0:
+            save_checkpoint(
+                model=meta_learner.module, save_path=save_path, step=step + 1
+            )
+            logger.info("Checkpoint saved.")
+
+        torch.cuda.empty_cache()
+        logger.info('--------------------------------------------')
 
 
 

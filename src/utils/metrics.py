@@ -15,6 +15,8 @@ METRICS = [
     "mean_squared_error",
 ]
 
+logger = logging.getLogger(__name__)
+
 
 def binarize_predictions(y: np.ndarray, threshold: float):
     """Binarize array based on provided threshold"""
@@ -50,6 +52,7 @@ def calculate_metrics(
     dict
         Dictionary mapping metrics name to metrics values.
     """
+
     unsupported_metrics = set(metrics) - set(METRICS)
     if unsupported_metrics:
         logging.error(
@@ -57,6 +60,16 @@ def calculate_metrics(
         )
         sys.exit(1)
     try:
+        # metric_values = {}
+        # for m in metrics:
+        #     if m in ["accuracy_score", "precision_score", "recall_score"]:
+        #         logger.info(f"METRIC: {m}, {y_true.shape}, {y_pred.shape}")
+
+        #         metric_values[m] = getattr(skmetrics, m)(y_true, binarize_predictions(y_pred, threshold))
+        #     else:
+        #         logger.info(f"METRIC: {m}, {y_true.shape}, {y_pred.shape}")
+        #         metric_values[m] = getattr(skmetrics, m)(y_true, y_pred)
+
         metric_values = {
             m: getattr(skmetrics, m)(y_true, binarize_predictions(y_pred, threshold))
             if m in ["accuracy_score", "precision_score", "recall_score"]
@@ -67,4 +80,4 @@ def calculate_metrics(
         logging.error(e)
         raise (e)
 
-    return 
+    return metric_values
