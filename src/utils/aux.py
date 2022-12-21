@@ -45,7 +45,7 @@ def get_batch_index(adj_matrix: np.array,
 
 def map_batch(features: Dict, num_edge: int, tomap: bool = False):
 
-    adjacency_lists = tuple(np.array(features[f"adjacency_list_{edge_type_idx}"], dtype=np.int)
+    adjacency_lists = tuple(np.array(features[f"adjacency_list_{edge_type_idx}"], dtype=int)
                                 for edge_type_idx in range(num_edge)),
 
     if not tomap:

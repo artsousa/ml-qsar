@@ -96,62 +96,68 @@ def run_iteration(
     step = 0
     flag = False
     train_loss = 0
-    for _ in range(inner_steps):
-        for inner_features, inner_labels in adaptation_data:            
-            data = aux.prepare_data(inner_features, inner_labels, n_edges)
 
-            for idx, batched in enumerate(data): # will run only once
-                x, y = batched
-                x, y = x.to(device), y.to(device)
+    try:
+        for _ in range(inner_steps):
+            for inner_features, inner_labels in adaptation_data:            
+                data = aux.prepare_data(inner_features, inner_labels, n_edges)
 
-                out = learner(x)
-                loss = criterion(out, y.unsqueeze(1))
-                loss /= y.shape[0]
-                learner.adapt(loss, allow_unused=True)
+                for idx, batched in enumerate(data): # will run only once
+                    x, y = batched
+                    x, y = x.to(device), y.to(device)
 
-                train_loss += loss
-            
-            if (step + 1) % inner_steps == 0:
-                flag = True
+                    out = learner(x)
+                    loss = criterion(out, y.unsqueeze(1))
+                    loss /= y.shape[0]
+                    learner.adapt(loss, allow_unused=True)
+
+                    train_loss += loss
+                
+                if (step + 1) % inner_steps == 0:
+                    flag = True
+                    break
+                step += 1
+
+            if flag:
                 break
-            step += 1
 
-        if flag:
-            break
+        valid_loss = 0
+        output = np.array([]).reshape(0, 1)
+        real_out = np.array([]).reshape(0, 1)
+        for outer_features, outer_labels in evaluation_data:
+            data = aux.prepare_data(outer_features, outer_labels, n_edges)
 
-    valid_loss = 0
-    output = np.array([]).reshape(0, 1)
-    real_out = np.array([]).reshape(0, 1)
-    for outer_features, outer_labels in evaluation_data:
-        data = aux.prepare_data(outer_features, outer_labels, n_edges)
+            for idx, batched in enumerate(data): # only once always
+                x, y = batched
+                x, y = x.to(device), y.to(device).unsqueeze(1)
 
-        for idx, batched in enumerate(data): # only once always
-            x, y = batched
-            x, y = x.to(device), y.to(device).unsqueeze(1)
-
-            if no_grad:
-                with torch.no_grad():
+                if no_grad:
+                    with torch.no_grad():
+                        out = learner(x)
+                        loss = criterion(out, y)
+                else:
                     out = learner(x)
                     loss = criterion(out, y)
-            else:
-                out = learner(x)
-                loss = criterion(out, y)
-            
-            valid_loss += loss / y.shape[0]
-            out = out.detach().numpy()
-            output = np.concatenate((output, out), axis=0)
-            real_out = np.concatenate((real_out, y), axis=0)
+                
+                valid_loss += loss / y.shape[0]
+                out = out.detach().numpy()
+                output = np.concatenate((output, out), axis=0)
+                real_out = np.concatenate((real_out, y), axis=0)
 
-    valid_metrics = mt.calculate_metrics(
-        metrics=metrics,
-        y_true=real_out,
-        y_pred=output,
-        threshold=0,
-    )
+        valid_metrics = mt.calculate_metrics(
+            metrics=metrics,
+            y_true=real_out,
+            y_pred=output,
+            threshold=0,
+        )
 
-    torch.cuda.empty_cache()
+        torch.cuda.empty_cache()
 
-    return valid_loss, valid_metrics, train_loss
+        return valid_loss, valid_metrics, train_loss
+
+    except Exception as e:
+        logger.info(f"skipped, problem loading graph")
+        return (0, 0, 0)
 
 def meta_training(
     meta_learner,
@@ -253,7 +259,7 @@ def meta_training(
                                                     )
 
             iteration_loss += outer_loss
-            meta_train_loss += outer_loss.item()
+            meta_train_loss += outer_loss
             meta_training_metrics = {
                 k: v + outer_metrics[k]
                 for k, v in meta_training_metrics.items()
@@ -274,6 +280,7 @@ def meta_training(
             logger.info(f"{k}: {v}")
 
         with open(os.path.join(save_path, "summary.json"), "w") as f:
+            logger.info(summary_dict)
             json.dump(summary_dict, f)
 
         if (step + 1) % ckpt_steps == 0:
