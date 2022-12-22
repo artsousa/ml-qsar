@@ -202,7 +202,7 @@ def meta_training(
     logger.info("Initial checkpoint saved.")
 
     epoch_count = 0
-    inner_batch_size = 8
+    inner_batch_size = 16
     steps_epoch = dataset.get_num_fold_tasks(DataFold.TRAIN) // task_batch_size
     logger.info(f"Total of {steps_epoch} steps per epoch\n")
 
@@ -210,6 +210,7 @@ def meta_training(
     description = stub_graph_dataset.get_batch_tf_data_description()
 
     ########## Meta training ##########
+    meta_epoch_loss = 0.0
     for step in range(meta_steps):
 
         logging.info(f"(Epoch {epoch_count + 1}) Step {step}")
@@ -229,13 +230,13 @@ def meta_training(
 
             if step > 0:
                 epoch_count += 1
-                logging.info(f" ==> Meta_training_loss: {meta_train_loss} \n")
-                break
+                logging.info(f" ==> Meta_training_loss: {meta_epoch_loss} \n")
+                meta_epoch_loss = 0.0
         
         ### sample task_batch_size tasks ###
         task_batch = next(batches_iterator) 
 
-        for task in task_batch:
+        for i, task in enumerate(task_batch):
             learner = meta_learner.clone()
             inner_data, outer_data = get_batched_samples(task, inner_batch_size)
 
@@ -259,12 +260,14 @@ def meta_training(
                                                     )
 
             iteration_loss += outer_loss
-            meta_train_loss += outer_loss
+            meta_train_loss += outer_loss.item() if type(outer_loss) is torch.Tensor else outer_loss 
             meta_training_metrics = {
                 k: v + outer_metrics[k]
                 for k, v in meta_training_metrics.items()
             }
-            
+
+            logger.info(f"task: {task.name}, [{i}] -> loss: {outer_loss}")
+        
         optimizer.zero_grad()
         iteration_loss.backward()
         optimizer.step()
@@ -272,6 +275,8 @@ def meta_training(
         meta_train_loss /= meta_batch_size
         summary_dict["meta_training_loss"].append(meta_train_loss)
         logger.info(f"meta_training_loss: {meta_train_loss}")
+
+        meta_epoch_loss += meta_train_loss
 
         # Print some metrics
         for k, v in meta_training_metrics.items():
