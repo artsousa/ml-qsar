@@ -157,7 +157,7 @@ def run_iteration(
 
     except Exception as e:
         logger.info(f"skipped, problem loading graph")
-        return (0, 0, 0)
+        return 0.0, {m: 0.0 for m in metrics}, 0.0
 
 def meta_training(
     meta_learner,
